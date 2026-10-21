@@ -35,7 +35,73 @@ function save(){let question=$('question').value.trim(),options=[...$('options')
 function filtered(){let t=$('search').value.toLowerCase().trim(),f=$('filter').value;return items.filter(q=>(!t||[q.question,q.category,...q.options].join(' ').toLowerCase().includes(t))&&(f==='all'||f==='ready'&&((q.corrects||[q.correct]).some(i=>q.options[i]))||f==='check'&&(!(q.corrects||[q.correct]).length||!q.explanation||(q.corrects||[q.correct]).length>1)))}
 function renderList(){let arr=filtered(),pages=Math.max(1,Math.ceil(arr.length/8));page=Math.max(0,Math.min(page,pages-1));$('list').innerHTML='';arr.slice(page*8,(page+1)*8).forEach(q=>{let n=items.findIndex(x=>x.id===q.id)+1,d=document.createElement('div');d.className='qrow';d.innerHTML='<div class="row" style="justify-content:space-between"><strong>'+n+'. '+esc(q.question)+'</strong><span class="tag">'+esc(q.category||'미분류')+'</span></div><div style="margin:10px 0">'+q.options.map((o,i)=>'<div style="margin:5px 0" class="'+(i===q.correct?'':'muted')+'">'+((q.corrects||[q.correct]).includes(i)?'✓ 정답 · ':'')+String.fromCharCode(9312+i)+' '+esc(o)+'</div>').join('')+'</div><div class="row"><button class="btn" data-edit>문제·정답 수정</button><button class="btn" data-del>삭제</button><span class="tag">'+q.options.length+'개 보기</span>'+(q.explanation?'':'<span class="tag">해설 미입력</span>')+'</div>';d.querySelector('[data-edit]').onclick=()=>edit(q.id);d.querySelector('[data-del]').onclick=()=>{if(confirm('이 문항을 삭제할까요?')){items=items.filter(x=>x.id!==q.id);persist();stats();renderList()}};$('list').append(d)});$('listinfo').textContent=arr.length+'개 문항 · '+(arr.length?page*8+1:0)+'–'+Math.min((page+1)*8,arr.length);$('prev').disabled=page===0;$('next').disabled=page>=pages-1;if(!arr.length)$('list').innerHTML='<p class="muted">등록된 문항이 없습니다.</p>'}
 function download(name,data,type){let u=URL.createObjectURL(new Blob([data],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
-function startExam(){let ready=items.filter(q=>(q.corrects||[q.correct]).length===1&&q.options[(q.corrects||[q.correct])[0]]);if(ready.length<20){alert('정답이 지정된 문항이 '+ready.length+'개입니다. 최소 20개가 필요합니다.');return}quiz=ready.sort(()=>Math.random()-.5).slice(0,20).map(q=>{let originalCorrect=(q.corrects||[q.correct])[0];let opts=q.options.map((v,i)=>({v,correct:i===originalCorrect}));if(opts.length>4){let c=opts.find(o=>o.correct);opts=[c,...opts.filter(o=>!o.correct).sort(()=>Math.random()-.5).slice(0,3)]}if(opts.length<4){let ds=['위 기준을 만족하지 않아도 된다','항상 반대 조건으로 설계한다','상황과 관계없이 동일하게 적용한다'];while(opts.length<4)opts.push({v:ds.find(s=>!opts.some(o=>o.v===s))||'관련 없는 조건 '+opts.length,correct:false})}return{...q,quizOptions:opts.sort(()=>Math.random()-.5)}});quizPos=0;quizAnswers={};submitted=false;$('quiz').classList.remove('hide');$('result').innerHTML='';showQuiz();$('quiz').scrollIntoView({behavior:'smooth'})}
+function startExam()
+function startExam() {
+  const ready = items.filter(q => {
+    const corrects = q.corrects || [q.correct];
+    return corrects.some(i => Number.isInteger(i) && q.options[i]);
+  });
+
+  if (ready.length < 20) {
+    alert('출제 가능한 문항이 ' + ready.length + '개입니다. 최소 20개가 필요합니다.');
+    return;
+  }
+
+  quiz = ready
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 20)
+    .map(q => {
+      const corrects = (q.corrects || [q.correct])
+        .filter(i => Number.isInteger(i) && q.options[i]);
+
+      // 원본 정답 중 1개를 무작위 선택
+      const picked = corrects[Math.floor(Math.random() * corrects.length)];
+
+      // 선택한 정답만 정답으로 인정
+      let opts = q.options.map((v, i) => ({
+        v,
+        correct: i === picked
+      }));
+
+      // 보기가 4개 초과면 정답 1개 + 나머지 보기 중 3개
+      if (opts.length > 4) {
+        const answer = opts.find(o => o.correct);
+        const wrongs = opts
+          .filter(o => !o.correct)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3);
+        opts = [answer, ...wrongs];
+      }
+
+      // 보기가 4개 미만이면 부족한 보기 보충
+      const fillers = [
+        '위 조건을 만족하지 않는다',
+        '항상 반대 조건으로 적용한다',
+        '상황과 관계없이 동일하게 적용한다'
+      ];
+
+      while (opts.length < 4) {
+        const filler = fillers.find(s => !opts.some(o => o.v === s));
+        opts.push({
+          v: filler || '관련 없는 조건 ' + opts.length,
+          correct: false
+        });
+      }
+
+      return {
+        ...q,
+        quizOptions: opts.sort(() => Math.random() - 0.5)
+      };
+    });
+
+  quizPos = 0;
+  quizAnswers = {};
+  submitted = false;
+  $('quiz').classList.remove('hide');
+  $('result').innerHTML = '';
+  showQuiz();
+  $('quiz').scrollIntoView({ behavior: 'smooth' });
+}
 function showQuiz(){let q=quiz[quizPos];$('quizbody').innerHTML='<p class="muted">문제 '+(quizPos+1)+' / '+quiz.length+'</p><h3>'+esc(q.question)+'</h3>'+q.quizOptions.map((o,i)=>'<label class="option qrow"><input type="radio" name="quizans" value="'+i+'" '+(quizAnswers[q.id]===i?'checked':'')+' '+(submitted?'disabled':'')+'><span>'+String.fromCharCode(9312+i)+' '+esc(o.v)+'</span></label>').join('')+(submitted?'<div class="qrow"><strong>'+(q.quizOptions[quizAnswers[q.id]]?.correct?'정답입니다':'오답입니다')+'</strong><p>정답: '+esc(q.quizOptions.find(o=>o.correct)?.v||'')+'</p><p class="muted">'+esc(q.explanation||'해설 미입력')+'</p></div>':'');$('submitquiz').classList.toggle('hide',submitted);$('nextquiz').classList.toggle('hide',!submitted);$('nextquiz').textContent=quizPos===19?'결과 보기':'다음 문제'}
 function submitQuiz(){let q=quiz[quizPos];if(quizAnswers[q.id]===undefined){alert('보기를 선택해 주세요.');return}submitted=true;showQuiz();if(quizPos===19){let score=quiz.filter(x=>x.quizOptions[quizAnswers[x.id]]?.correct).length;$('result').innerHTML='<div class="qrow"><h3>최종 점수: '+score+' / 20 ('+score*5+'점)</h3><p>아래 문항별 정답과 해설을 확인하세요.</p>'+quiz.map((x,i)=>'<div class="qrow"><strong>'+(i+1)+'. '+esc(x.question)+'</strong><p>'+(x.quizOptions[quizAnswers[x.id]]?.correct?'✓ 정답':'✕ 오답')+' · 정답: '+esc(x.quizOptions.find(o=>o.correct)?.v||'')+'</p><p class="muted">'+esc(x.explanation||'해설 미입력')+'</p></div>').join('')+'</div>'}}
 $('addoption').onclick=()=>addOption();$('save').onclick=save;$('reset').onclick=reset;$('search').oninput=()=>{page=0;renderList()};$('filter').onchange=()=>{page=0;renderList()};$('prev').onclick=()=>{page--;renderList()};$('next').onclick=()=>{page++;renderList()};$('export').onclick=()=>download('문제은행_백업.json',JSON.stringify(items,null,2),'application/json');$('importbtn').onclick=()=>$('importfile').click();$('importfile').onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let a=JSON.parse(r.result);if(!Array.isArray(a)||a.some(q=>typeof q.question!=='string'||!Array.isArray(q.options)))throw 0;if(confirm('백업의 '+a.length+'개 문항으로 현재 목록을 교체할까요?')){items=a.map(q=>({...q,corrects:Array.isArray(q.corrects)?q.corrects:(Number.isInteger(q.correct)?[q.correct]:[])}));persist();stats();renderList()}}catch(e){alert('올바른 문제은행 JSON 파일이 아닙니다.')} };r.readAsText(f);e.target.value=''};$('exam').onclick=startExam;$('closequiz').onclick=()=>$('quiz').classList.add('hide');$('submitquiz').onclick=submitQuiz;$('nextquiz').onclick=()=>{if(quizPos<19){quizPos++;submitted=false;showQuiz()}else{$('result').scrollIntoView({behavior:'smooth'})}};$('quizbody').addEventListener('change',e=>{if(e.target.name==='quizans'&&!submitted)quizAnswers[quiz[quizPos].id]=+e.target.value});
