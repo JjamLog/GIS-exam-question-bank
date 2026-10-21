@@ -71,10 +71,21 @@ function startExam(){
  quiz=ready.slice().sort(()=>Math.random()-.5).slice(0,20).map(q=>{
    const corrects=(q.corrects||[q.correct]).filter(i=>Number.isInteger(i)&&q.options[i]!==undefined);
    const picked=corrects[Math.floor(Math.random()*corrects.length)];
-   let opts=q.options.map((v,i)=>({v,correct:i===picked}));
-   if(opts.length>4){const answer=opts.find(o=>o.correct);const wrongs=opts.filter(o=>!o.correct).sort(()=>Math.random()-.5).slice(0,3);opts=[answer,...wrongs]}
-   const fillers=['위 기준을 만족하지 않아도 된다','항상 반대 조건으로 설계한다','상황과 관계없이 동일하게 적용한다'];
-   while(opts.length<4){const filler=fillers.find(s=>!opts.some(o=>o.v===s));opts.push({v:filler||'관련 없는 조건 '+opts.length,correct:false})}
+   // 원본의 모든 정답 보기를 오답 후보에서 제외한다.
+   // 모의고사에는 원본 정답 중 무작위로 고른 1개만 정답으로 넣는다.
+   const answer={v:q.options[picked],correct:true};
+   const wrongs=q.options
+     .map((v,i)=>({v,correct:false,index:i}))
+     .filter(o=>!corrects.includes(o.index))
+     .sort(()=>Math.random()-.5)
+     .slice(0,3)
+     .map(({v})=>({v,correct:false}));
+   const opts=[answer,...wrongs];
+   const fillers=['위 기준을 만족하지 않아도 된다','항상 반대 조건으로 설계한다','상황과 관계없이 동일하게 적용한다','관련 없는 조건으로 적용한다'];
+   while(opts.length<4){
+     const filler=fillers.find(s=>!opts.some(o=>o.v===s));
+     opts.push({v:filler||('관련 없는 조건 '+(opts.length+1)),correct:false});
+   }
    return {...q,quizOptions:opts.sort(()=>Math.random()-.5)}
  });
  quizPos=0;quizAnswers={};submitted=false;$('quiz').classList.remove('hide');$('result').innerHTML='';showQuiz();$('quiz').scrollIntoView({behavior:'smooth'})
