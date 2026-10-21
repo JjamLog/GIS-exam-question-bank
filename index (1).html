@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>나만의 171문항 문제은행</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;color:#222;background:#f6f7f9}
+*{box-sizing:border-box}body{margin:0;padding:20px}.wrap{max-width:900px;margin:auto}
+.panel,.stat{background:#fff;border:1px solid #e1e4e8;border-radius:15px;padding:16px;margin:14px 0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{margin:0}
+.stat strong{display:block;font-size:25px;margin:5px 0}.muted{color:#68717d;font-size:13px}
+.field{width:100%;padding:11px;border:1px solid #cfd5dd;border-radius:9px;font:inherit;background:white;margin:5px 0 12px}
+.btn{border:1px solid #cfd5dd;border-radius:9px;padding:10px 13px;background:white;cursor:pointer;font:inherit}
+.primary{background:#2459d3;color:white;border-color:#2459d3}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.option{display:flex;gap:8px;align-items:center;margin:7px 0}.option input[type=text]{flex:1;min-width:100px;margin:0}
+.option input[type=checkbox],.option input[type=radio]{width:18px;height:18px;flex-shrink:0;accent-color:#2459d3}
+.qrow{border:1px solid #e1e4e8;border-radius:12px;padding:13px;margin:9px 0}.hide{display:none}
+.tag{font-size:12px;border:1px solid #d8dce2;border-radius:20px;padding:3px 8px}.danger{color:#b42318}
+label{font-weight:600}textarea{resize:vertical}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #2459d3;outline-offset:2px}
+@media(max-width:560px){body{padding:10px}.panel{padding:13px}.stats{gap:6px}.stat{padding:10px}.stat strong{font-size:21px}}
+</style>
+</head>
+<body><main class="wrap">
+<h1>나만의 171문항 문제은행</h1>
+<p class="muted">원본 문제는 보기를 여러 개 입력하고 정답도 복수 선택할 수 있습니다. 모의고사에서는 원본 정답 중 하나를 골라 4지선다형으로 출제합니다.</p>
+<div class="stats">
+ <div class="stat"><span class="muted">등록 문항</span><strong id="count">0</strong><span class="muted">목표 171개</span></div>
+ <div class="stat"><span class="muted">정답 지정</span><strong id="answered">0</strong><span class="muted">정답이 지정된 문항</span></div>
+ <div class="stat"><span class="muted">목표 달성</span><strong id="percent">0%</strong><span class="muted">등록 기준</span></div>
+</div>
+<section class="panel" id="formpanel">
+<h2 id="formtitle">문항 등록</h2>
+<label for="question">문제 내용</label><textarea class="field" id="question" rows="3" placeholder="문제 내용을 입력하세요"></textarea>
+<div class="row" style="justify-content:space-between"><label>보기 및 정답 선택 (정답은 모두 체크)</label><button class="btn" id="addoption">＋ 보기 추가</button></div>
+<div id="options"></div>
+<label for="category">분류 (선택)</label><input class="field" id="category" placeholder="예: 접지설계, 변전시험">
+<label for="explanation">해설 / 메모 (선택)</label><textarea class="field" id="explanation" rows="2" placeholder="해설이나 나중에 확인할 내용을 입력하세요"></textarea>
+<p id="error" class="danger"></p><div class="row"><button class="btn primary" id="save">문항 저장</button><button class="btn" id="reset">입력 초기화</button></div>
+</section>
+<section class="panel">
+<h2>문제 목록</h2>
+<div class="row"><input class="field" style="flex:1;min-width:180px;margin:0" id="search" placeholder="문제·보기·분류 검색">
+<select class="field" style="width:auto;margin:0" id="filter"><option value="all">전체 문항</option><option value="ready">정답 지정됨</option><option value="check">검토 필요</option></select></div>
+<div class="row" style="margin:12px 0"><button class="btn" id="export">JSON 백업 저장</button><button class="btn" id="importbtn">백업 불러오기</button><input id="importfile" class="hide" type="file" accept=".json,application/json"><button class="btn primary" id="exam">20문제 모의고사</button></div>
+<p class="muted">문항은 이 브라우저에 저장됩니다. 다른 컴퓨터에서도 쓰려면 JSON 백업을 저장하고 옮겨 주세요. 복수 정답 원본도 목록에서 조회되며, 모의고사에서는 정답 하나와 오답 세 개로 구성됩니다.</p>
+<div id="list"></div><div class="row" style="justify-content:space-between"><span id="listinfo" class="muted"></span><div><button class="btn" id="prev">이전</button> <button class="btn" id="next">다음</button></div></div>
+</section>
+<section class="panel hide" id="quiz"><div class="row" style="justify-content:space-between"><h2>20문제 모의고사</h2><button class="btn" id="closequiz">닫기</button></div><div id="quizbody"></div><div class="row"><button class="btn primary" id="submitquiz">답안 확인</button><button class="btn hide" id="nextquiz">다음 문제</button></div><div id="result"></div></section>
+<p id="notice" class="muted"></p>
+</main>
+<script>
+const $=id=>document.getElementById(id),KEY='qb_171_question_bank_v1';
+let items=[],editing=null,page=0,quiz=[],quizPos=0,quizAnswers={},submitted=false;
+const uid=()=> 'q'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(items));$('notice').textContent='자동 저장 완료.'}catch(e){$('notice').textContent='브라우저 저장에 실패했습니다. JSON 백업을 저장해 주세요.'}}
+function stats(){$('count').textContent=items.length;$('answered').textContent=items.filter(q=>(q.corrects||[q.correct]).some(i=>Number.isInteger(i)&&q.options[i]!==undefined)).length;$('percent').textContent=Math.min(100,Math.round(items.length/171*100))+'%'}
+function addOption(value='',checked=false){let d=document.createElement('div');d.className='option';d.innerHTML='<input type="checkbox" aria-label="정답 선택"><span></span><input class="field" type="text" placeholder="보기 내용" aria-label="보기 내용"><button class="btn" type="button">삭제</button>';d.querySelector('input[type=checkbox]').checked=checked;d.querySelector('input[type=text]').value=value;d.querySelector('button').onclick=()=>{if($('options').children.length<=2){$('error').textContent='보기는 최소 2개 이상 입력해 주세요.';return}d.remove();renumber()};$('options').append(d);renumber()}
+function renumber(){[...$('options').children].forEach((e,i)=>e.querySelector('span').textContent=(i+1)+'.')}
+function optionRows(vals=['','','',''],correct=[]){$('options').innerHTML='';if(!Array.isArray(correct))correct=Number.isInteger(correct)&&correct>=0?[correct]:[];vals.forEach((v,i)=>addOption(v,correct.includes(i)))}
+function reset(){editing=null;$('question').value='';$('category').value='';$('explanation').value='';optionRows(['','','','']);$('formtitle').textContent='문항 등록';$('save').textContent='문항 저장';$('error').textContent=''}
+function edit(id){let q=items.find(x=>x.id===id);if(!q)return;editing=id;$('question').value=q.question;$('category').value=q.category||'';$('explanation').value=q.explanation||'';optionRows(q.options,q.corrects||q.correct);$('formtitle').textContent='문항 수정';$('save').textContent='수정 내용 저장';$('error').textContent='';$('formpanel').scrollIntoView({behavior:'smooth'})}
+function save(){let question=$('question').value.trim(),options=[...$('options').querySelectorAll('input[type=text]')].map(x=>x.value.trim()),correct=[...$('options').querySelectorAll('input[type=checkbox]')].map((x,i)=>x.checked?i:-1).filter(i=>i>=0);if(!question){$('error').textContent='문제 내용을 입력해 주세요.';return}if(options.length<2||options.some(x=>!x)){$('error').textContent='빈 보기 없이 2개 이상 입력해 주세요.';return}if(correct.length<1){$('error').textContent='정답 보기를 하나 이상 선택해 주세요.';return}let d={id:editing||uid(),question,options,correct:correct[0],corrects:correct,category:$('category').value.trim(),explanation:$('explanation').value.trim()};if(editing)items=items.map(x=>x.id===editing?d:x);else items.unshift(d);persist();stats();page=0;renderList();reset();$('notice').textContent='문항을 저장했습니다.'}
+function filtered(){let t=$('search').value.toLowerCase().trim(),f=$('filter').value;return items.filter(q=>(!t||[q.question,q.category,...q.options].join(' ').toLowerCase().includes(t))&&(f==='all'||(f==='ready'&&(q.corrects||[q.correct]).some(i=>q.options[i]!==undefined))||(f==='check'&&(!(q.corrects||[q.correct]).length||!q.explanation||(q.corrects||[q.correct]).length>1))));}
+function renderList(){let arr=filtered(),pages=Math.max(1,Math.ceil(arr.length/8));page=Math.max(0,Math.min(page,pages-1));$('list').innerHTML='';arr.slice(page*8,(page+1)*8).forEach(q=>{let n=items.findIndex(x=>x.id===q.id)+1,d=document.createElement('div');d.className='qrow';d.innerHTML='<div class="row" style="justify-content:space-between"><strong>'+n+'. '+esc(q.question)+'</strong><span class="tag">'+esc(q.category||'미분류')+'</span></div><div style="margin:10px 0">'+q.options.map((o,i)=>'<div style="margin:5px 0" class="'+((q.corrects||[q.correct]).includes(i)?'':'muted')+'">'+((q.corrects||[q.correct]).includes(i)?'✓ 정답 · ':'')+String.fromCharCode(9312+i)+' '+esc(o)+'</div>').join('')+'</div><div class="row"><button class="btn" data-edit>문제·정답 수정</button><button class="btn" data-del>삭제</button><span class="tag">'+q.options.length+'개 보기</span>'+(((q.corrects||[q.correct]).length>1)?'<span class="tag">복수 정답</span>':'');d.querySelector('[data-edit]').onclick=()=>edit(q.id);d.querySelector('[data-del]').onclick=()=>{if(confirm('이 문항을 삭제할까요?')){items=items.filter(x=>x.id!==q.id);persist();stats();renderList()}};$('list').append(d)});$('listinfo').textContent=arr.length+'개 문항 · '+(arr.length?page*8+1:0)+'–'+Math.min((page+1)*8,arr.length);$('prev').disabled=page===0;$('next').disabled=page>=pages-1;if(!arr.length)$('list').innerHTML='<p class="muted">등록된 문항이 없습니다.</p>'}
+function download(name,data,type){let u=URL.createObjectURL(new Blob([data],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+function startExam(){
+ const ready=items.filter(q=>(q.corrects||[q.correct]).some(i=>Number.isInteger(i)&&q.options[i]!==undefined));
+ if(ready.length<20){alert('출제 가능한 문항이 '+ready.length+'개입니다. 최소 20개가 필요합니다.');return}
+ quiz=ready.slice().sort(()=>Math.random()-.5).slice(0,20).map(q=>{
+   const corrects=(q.corrects||[q.correct]).filter(i=>Number.isInteger(i)&&q.options[i]!==undefined);
+   const picked=corrects[Math.floor(Math.random()*corrects.length)];
+   let opts=q.options.map((v,i)=>({v,correct:i===picked}));
+   if(opts.length>4){const answer=opts.find(o=>o.correct);const wrongs=opts.filter(o=>!o.correct).sort(()=>Math.random()-.5).slice(0,3);opts=[answer,...wrongs]}
+   const fillers=['위 기준을 만족하지 않아도 된다','항상 반대 조건으로 설계한다','상황과 관계없이 동일하게 적용한다'];
+   while(opts.length<4){const filler=fillers.find(s=>!opts.some(o=>o.v===s));opts.push({v:filler||'관련 없는 조건 '+opts.length,correct:false})}
+   return {...q,quizOptions:opts.sort(()=>Math.random()-.5)}
+ });
+ quizPos=0;quizAnswers={};submitted=false;$('quiz').classList.remove('hide');$('result').innerHTML='';showQuiz();$('quiz').scrollIntoView({behavior:'smooth'})
+}
+function showQuiz(){let q=quiz[quizPos];$('quizbody').innerHTML='<p class="muted">문제 '+(quizPos+1)+' / '+quiz.length+'</p><h3>'+esc(q.question)+'</h3>'+q.quizOptions.map((o,i)=>'<label class="option qrow"><input type="radio" name="quizans" value="'+i+'" '+(quizAnswers[q.id]===i?'checked':'')+' '+(submitted?'disabled':'')+'><span>'+String.fromCharCode(9312+i)+' '+esc(o.v)+'</span></label>').join('')+(submitted?'<div class="qrow"><strong>'+(q.quizOptions[quizAnswers[q.id]]?.correct?'정답입니다':'오답입니다')+'</strong><p>정답: '+esc(q.quizOptions.find(o=>o.correct)?.v||'')+'</p><p class="muted">'+esc(q.explanation||'해설 미입력')+'</p></div>':'');$('submitquiz').classList.toggle('hide',submitted);$('nextquiz').classList.toggle('hide',!submitted);$('nextquiz').textContent=quizPos===19?'결과 보기':'다음 문제'}
+function submitQuiz(){let q=quiz[quizPos];if(quizAnswers[q.id]===undefined){alert('보기를 선택해 주세요.');return}submitted=true;showQuiz();if(quizPos===19){let score=quiz.filter(x=>x.quizOptions[quizAnswers[x.id]]?.correct).length;$('result').innerHTML='<div class="qrow"><h3>최종 점수: '+score+' / 20 ('+score*5+'점)</h3><p>아래 문항별 정답과 해설을 확인하세요.</p>'+quiz.map((x,i)=>'<div class="qrow"><strong>'+(i+1)+'. '+esc(x.question)+'</strong><p>'+(x.quizOptions[quizAnswers[x.id]]?.correct?'✓ 정답':'✕ 오답')+' · 정답: '+esc(x.quizOptions.find(o=>o.correct)?.v||'')+'</p><p class="muted">'+esc(x.explanation||'해설 미입력')+'</p></div>').join('')+'</div>'}}
+$('addoption').onclick=()=>addOption();$('save').onclick=save;$('reset').onclick=reset;$('search').oninput=()=>{page=0;renderList()};$('filter').onchange=()=>{page=0;renderList()};$('prev').onclick=()=>{page--;renderList()};$('next').onclick=()=>{page++;renderList()};$('export').onclick=()=>download('문제은행_백업.json',JSON.stringify(items,null,2),'application/json');$('importbtn').onclick=()=>$('importfile').click();$('importfile').onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let a=JSON.parse(r.result);if(!Array.isArray(a)||a.some(q=>typeof q.question!=='string'||!Array.isArray(q.options)))throw 0;if(confirm('백업의 '+a.length+'개 문항으로 현재 목록을 교체할까요?')){items=a.map(q=>({...q,corrects:Array.isArray(q.corrects)?q.corrects:(Number.isInteger(q.correct)?[q.correct]:[])}));persist();stats();renderList()}}catch(e){alert('올바른 문제은행 JSON 파일이 아닙니다.')} };r.readAsText(f);e.target.value=''};$('exam').onclick=startExam;$('closequiz').onclick=()=>$('quiz').classList.add('hide');$('submitquiz').onclick=submitQuiz;$('nextquiz').onclick=()=>{if(quizPos<19){quizPos++;submitted=false;showQuiz()}else{$('result').scrollIntoView({behavior:'smooth'})}};$('quizbody').addEventListener('change',e=>{if(e.target.name==='quizans'&&!submitted)quizAnswers[quiz[quizPos].id]=+e.target.value});
+try{items=JSON.parse(localStorage.getItem(KEY)||'[]');if(!Array.isArray(items))items=[];items=items.map(q=>({...q,corrects:Array.isArray(q.corrects)?q.corrects:(Number.isInteger(q.correct)?[q.correct]:[])}))}catch(e){items=[]}
+optionRows(['','','','']);stats();renderList();
+</script></body></html>
